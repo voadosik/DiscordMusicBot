@@ -39,7 +39,7 @@ Before you start, ensure you have the following:
    Upload this file to the folder with JDK.
    Create application.yml file with the following content:
    ```application.yml
-       server: # REST and WS server
+   server: # REST and WS server
       port: 2333
       address: 0.0.0.0
       http2:
