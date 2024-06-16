@@ -1,5 +1,6 @@
 ﻿namespace Configuration.Lavalink
 {
+  //Lavalink configuration (only websocketUri used)
   public class LavalinkConfiguration
   {
     public string RestUri { get; set; }

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Core.DiscordHost
 {
+  //Hosted service for a Discord Bot
   public sealed class DiscordHost : IHostedService
   {
     private readonly DiscordSocketClient _discordSocketClient;
@@ -17,6 +18,7 @@ namespace Core.DiscordHost
     private readonly IConfiguration _configuration;
     private readonly TaskCompletionSource<bool> _clientReadyCompletionSource = new();
 
+    //Constructor initializes all dependencies required by Discord Bot
     public DiscordHost(
         DiscordSocketClient discordSocketClient,
         InteractionService interactionService,
@@ -31,21 +33,23 @@ namespace Core.DiscordHost
       _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
+    //Start bot
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+      //Event handlers
       _discordSocketClient.Log += LogAsync;
       _discordSocketClient.InteractionCreated += InteractionCreated;
       _discordSocketClient.Ready += ClientReady;
-
+      
       _logger.LogInformation("Logging in the bot.");
       try
       {
+        //Retrieve a token from appsettings
         var token = _configuration["Discord:Token"];
         if (string.IsNullOrEmpty(token))
-        {
           throw new InvalidOperationException("Bot token is not configured.");
-        }
-
+        
+        //Log in to Discord using token
         await _discordSocketClient
             .LoginAsync(TokenType.Bot, token)
             .ConfigureAwait(false);
@@ -59,6 +63,7 @@ namespace Core.DiscordHost
       _logger.LogInformation("Starting the bot.");
       try
       {
+        //Start the Discord client 
         await _discordSocketClient
             .StartAsync()
             .ConfigureAwait(false);
@@ -71,8 +76,8 @@ namespace Core.DiscordHost
 
       _logger.LogInformation("Waiting for the Discord client to be ready.");
       var clientReadyTask = _clientReadyCompletionSource.Task;
-
-      if (await Task.WhenAny(clientReadyTask, Task.Delay(TimeSpan.FromMinutes(2))) != clientReadyTask)
+      //Wait for the client to be ready for 30 seconds
+      if (await Task.WhenAny(clientReadyTask, Task.Delay(TimeSpan.FromSeconds(30))) != clientReadyTask)
       {
         _logger.LogError("Timed out while waiting for Discord client to be ready.");
         throw new TimeoutException("Timed out while waiting for Discord client to be ready.");
@@ -81,30 +86,36 @@ namespace Core.DiscordHost
       _logger.LogInformation("Discord client is ready.");
     }
 
+    //Stop Discord Bot
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+      //Unregister event handlers
       _discordSocketClient.Log -= LogAsync;
       _discordSocketClient.InteractionCreated -= InteractionCreated;
       _discordSocketClient.Ready -= ClientReady;
 
       _logger.LogInformation("Stopping the bot.");
+      //Stop the bot
       await _discordSocketClient
           .StopAsync()
           .ConfigureAwait(false);
     }
 
+    //Event handler for interaction created events
     private Task InteractionCreated(SocketInteraction interaction)
     {
       var interactionContext = new SocketInteractionContext(_discordSocketClient, interaction);
       return _interactionService.ExecuteCommandAsync(interactionContext, _serviceProvider);
     }
 
+    //Event handler on the Discord Client ready
     private async Task ClientReady()
     {
       _logger.LogInformation("Client is ready, adding modules.");
       ulong guildID = ulong.Parse(_configuration["Discord:GuildID"]!);
       try
       {
+        //Register all the commands and add all the modules to the interaction service
         await _interactionService
             .AddModulesAsync(Assembly.GetExecutingAssembly(), _serviceProvider)
             .ConfigureAwait(false);
@@ -123,6 +134,7 @@ namespace Core.DiscordHost
       }
     }
 
+    //Event handler for logging
     private Task LogAsync(LogMessage logMessage)
     {
       _logger.Log(logMessage.Severity.ToLogLevel(), logMessage.Exception, logMessage.Message);
@@ -130,6 +142,7 @@ namespace Core.DiscordHost
     }
   }
 
+  // Convert Discord log severity to C# logging
   public static class LogSeverityExtensions
   {
     public static LogLevel ToLogLevel(this LogSeverity severity)
