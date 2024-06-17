@@ -15,6 +15,7 @@ namespace Core.AudioHandler
   {
 
     private readonly IAudioService _audioService;
+    private static readonly Dictionary<string, List<string>> _playlists = new();
 
     //Audio Service initializer
     public AudioHandler(IAudioService audioService)
@@ -185,6 +186,75 @@ namespace Core.AudioHandler
       // Resume the player 
       await player.ResumeAsync().ConfigureAwait(false);
       await RespondAsync("Resumed.").ConfigureAwait(false);
+    }
+
+    [SlashCommand("playlist_new", description: "Creates a new playlist", runMode: RunMode.Async)]
+    public async Task CreatePlaylist(string playlistName)
+    {
+      if (_playlists.ContainsKey(playlistName))
+      {
+        await RespondAsync("A playlist with that name already exists.").ConfigureAwait(false);
+        return;
+      }
+
+      _playlists[playlistName] = new List<string>();
+      await RespondAsync($"Playlist '{playlistName}' created.").ConfigureAwait(false);
+    }
+
+    [SlashCommand("playlist_add", description: "Adds a song to a playlist", runMode: RunMode.Async)]
+    public async Task AddToPlaylist(string playlistName, string trackUrl)
+    {
+      if (!_playlists.ContainsKey(playlistName))
+      {
+        await RespondAsync("Playlist not found.").ConfigureAwait(false);
+        return;
+      }
+      var player = await GetPlayerAsync(connectToVoiceChannel: true).ConfigureAwait(false);
+
+      if (player is null) return;
+
+      var track = await _audioService.Tracks
+            .LoadTrackAsync(trackUrl, TrackSearchMode.SoundCloud)
+            .ConfigureAwait(false);
+
+      if (track is null)
+      {
+        await RespondAsync($"Invalid link, can't be added to a playlist.").ConfigureAwait(false);
+        return;
+      }
+
+      _playlists[playlistName].Add(trackUrl);
+      await RespondAsync($"Added track to playlist '{playlistName}'.").ConfigureAwait(false);
+    }
+
+    [SlashCommand("playlist_play", description: "Plays a playlist", runMode: RunMode.Async)]
+    public async Task PlayPlaylist(string playlistName)
+    {
+      if (!_playlists.ContainsKey(playlistName))
+      {
+        await RespondAsync("Playlist not found.").ConfigureAwait(false);
+        return;
+      }
+
+      var player = await GetPlayerAsync(connectToVoiceChannel: true).ConfigureAwait(false);
+      if (player is null) return;
+
+      foreach (var trackUrl in _playlists[playlistName])
+      {
+        var track = await _audioService.Tracks
+            .LoadTrackAsync(trackUrl, TrackSearchMode.SoundCloud)
+            .ConfigureAwait(false);
+
+        if (track is null)
+        {
+          await FollowupAsync($"Could not load track: {trackUrl}").ConfigureAwait(false);
+          continue;
+        }
+
+        await player.PlayAsync(track).ConfigureAwait(false);
+      }
+
+      await FollowupAsync($"Playing playlist '{playlistName}'.").ConfigureAwait(false);
     }
 
     // Helper method to retrieve the player and optionally connect to a voice channel
